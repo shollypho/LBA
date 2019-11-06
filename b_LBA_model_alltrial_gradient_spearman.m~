@@ -1,0 +1,121 @@
+%% LBA model trial data
+% Use the extracted gradients from the data to make models of the data,
+% using fminsearch to find the best fit
+addpath('/imaging/hp02/finger_tapping08/analysis_spm/LBA_modelling/ERPs/variable_ndt');
+addpath('/imaging/hp02/finger_tapping08/analysis_spm/LBA_modelling/Time-Frequency/average_variable_ndt/MEGCOMB');
+clc
+%clear all
+%load('/imaging/hp02/finger_tapping08/analysis_spm/LBA_modelling/ERPs/average_variable_ndt/MEGCOMB/trialdata.mat');
+
+
+
+sname = [ 23 24 25 26 27 28 29 30 31 32 33 527 528 529 530 533 534];
+ROInum = 96;
+
+
+%% STATS
+
+% MEAN NDT
+
+% for ss = 1:length(sname)
+%     ndt_samp = trialdata{ss,1}.ndt_samp;
+%     for roi = 1:ROInum
+%         all_ndt_split(ss,roi) = lba_stats{ss,roi}.x2(1,1);
+%         proportion_ndt_split(ss,roi) = all_ndt_split(ss,roi)/ndt_samp;
+%     end
+% end
+% 
+% mean_ndt_split = mean(all_ndt_split,1)*10;
+% mean_prop_ndt_split = mean(proportion_ndt_split,1);
+
+%%
+%% CORRELATIONS - grab from LBA modelling
+
+%  all action trials together
+for roi = 1:ROInum
+    roi
+    for ss = 1:length(sname)
+        ss
+        [maxR, t1_opt_idx] = max(abs(lba_stats{ss,roi}.rho));
+        
+        rvalues.allt_alltrials_r(ss,roi) = lba_stats{ss,roi}.rho(t1_opt_idx);
+        rvalues.allt_alltrials_p(ss,roi) = lba_stats{ss,roi}.p;
+        if lba_stats{ss,roi}.p<(0.05/96/17); rvalues.allt_alltrials_h(ss,roi) = 1;
+        else rvalues.allt_alltrials_h(ss,roi) = 0; end
+              
+    end
+end
+
+%save('60-90Hz/rvalues_spearman.mat', 'rvalues');
+
+%% Specified trials and Free trials rvalues, all trials together
+% Accumulation period only, all trials together
+for roi = 1:ROInum
+    roi
+    for ss = 1:length(sname)
+        
+        ndt = floor(trialdata{ss,roi}.ndt_samp);
+        t1 = round(all_ndt_split(ss, roi));
+        if t1 ==0; t1 = 1;end
+        if t1>ndt; t1 = ndt; end
+        % start arrays to store model and data timeseries across all trials
+        clear fullmodel_alltrials_free fulldata_alltrials_free
+        clear fullmodel_alltrials_spec fulldata_alltrials_spec
+        fullmodel_alltrials_free = []; % all time
+        fulldata_alltrials_free  = [];
+        fullmodel_alltrials_spec = []; % all time
+        fulldata_alltrials_spec  = [];
+        
+        cnt = 0;
+        cntf = 0;
+        cnts = 0;
+        for tr = 1:length(trialdata{ss,roi}.trial)
+            if ~isempty(trialdata{ss,roi}.trial{1,tr})
+                cnt = cnt + 1;
+                % keep in samples:
+            RT = trialdata{ss,roi}.trial{1,tr}.RT_samp;
+            %b0 = trialdata{ss,ch}.trial{1,tr}.b0;
+            b1 = trialdata{ss,roi}.trial{1,tr}.LBA_grad;
+            t2 = RT - (ndt-t1);
+            acc_time = RT-ndt;
+            thres = b1*acc_time;
+            
+            % individual trials:
+            
+            % all time extraction and correlation
+            clear fullmodel fulldata r p
+            fullmodel = [zeros(1,t1-1) 0:b1:thres ones(1,RT-t2)*(thres)];
+            fulldata = trialdata{ss,roi}.trial{1,tr}.trialdata;
+            
+            if strcmp(trialdata{ss,roi}.trial{1,tr}.triallabel, 'SPEC')
+                fullmodel_alltrials_spec = [fullmodel_alltrials_spec fullmodel];
+                fulldata_alltrials_spec  = [fulldata_alltrials_spec  fulldata];
+            elseif strcmp(trialdata{ss,roi}.trial{1,tr}.triallabel, 'FREE')
+                fullmodel_alltrials_free = [fullmodel_alltrials_free fullmodel];
+                fulldata_alltrials_free  = [fulldata_alltrials_free  fulldata];
+            end
+            
+            
+            
+            
+          
+            end
+        end
+        
+        % All trials together correlations:
+        clear rho_free rho_spec p_free p_spec
+        [rho_free,p_free] = corr(fullmodel_alltrials_free', fulldata_alltrials_free','type','Spearman');
+        [rho_spec,p_spec] = corr(fullmodel_alltrials_spec', fulldata_alltrials_spec','type','Spearman');
+        
+        % free trials
+        rvalues.allt_alltrials_r_free(ss,roi) = rho_free; rvalues.allt_alltrials_p_free(ss,roi) = p_free;
+        if p_free<(0.05/96/17); rvalues.allt_alltrials_h_free(ss,roi) = 1;
+        else rvalues.allt_alltrials_h_free(ss,roi) = 0; end
+        
+        % specified trials
+        rvalues.allt_alltrials_r_spec(ss,roi) = rho_spec; rvalues.allt_alltrials_p_spec(ss,roi) = p_spec;
+        if p_spec<(0.05/96/17); rvalues.allt_alltrials_h_spec(ss,roi) = 1;
+        else rvalues.allt_alltrials_h_spec(ss,roi) = 0; end
+        
+    end
+end
